@@ -18,13 +18,20 @@ router
       const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
       const user = await createUser(username, hashedPassword);
 
+      if (!user || !user.id) {
+        console.error(error.message);
+        return res
+          .status(500)
+          .send("Internal server error: User not created correctly.");
+      }
+
       const token = createToken({ id: user.id });
-      res.status(200).send(token);
+      res.status(201).send(token);
     } catch (error) {
       if (error.code === "23505") {
         return res.status(409).send("Username already exists.");
       }
-      console.error("Error during user registration:", error);
+      console.error(error.message);
       res.status(500).send("Internal server error.");
     }
   });
@@ -37,11 +44,22 @@ router
     try {
       const user = await getUserByUsername(username);
 
-      if (!user) {
+      if (
+        !user ||
+        typeof user.password !== "string" ||
+        user.password.length === 0
+      ) {
         return res.status(401).send("Invalid username or password.");
       }
 
-      const passwordMatch = await bcrypt.compare(password, user.password);
+      let passwordMatch = false;
+
+      try {
+        passwordMatch = await bcrypt.compare(password, user.password);
+      } catch (error) {
+        console.error(error.message);
+        return res.status(401).send("Invalid username or password.");
+      }
 
       if (!passwordMatch) {
         return res.status(401).send("Invalid username or password.");
@@ -50,7 +68,7 @@ router
       const token = createToken({ id: user.id });
       res.send(token);
     } catch (error) {
-      console.error("Error during user login:", error);
+      console.error(error.message);
       res.status(500).send("Internal server error.");
     }
   });
