@@ -1,7 +1,6 @@
 import db from "#db/client";
 
 export async function createUser(username, password) {
-  // 'password' is the already-hashed password here
   const sql = `
     INSERT INTO users (username, password)
     VALUES ($1, $2)
@@ -9,7 +8,7 @@ export async function createUser(username, password) {
     `;
   const {
     rows: [user],
-  } = await db.query(sql, [username, password]); // Correctly uses the 'password' parameter
+  } = await db.query(sql, [username, password]);
   return user;
 }
 
@@ -23,7 +22,7 @@ export async function getUserByUsername(username) {
     rows: [user],
   } = await db.query(sql, [username]);
 
-  return user; // Returns user object, including the 'password' column (the hash)
+  return user;
 }
 
 export async function getUserById(id) {

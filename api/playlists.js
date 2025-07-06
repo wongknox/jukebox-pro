@@ -1,6 +1,7 @@
 import express from "express";
 const router = express.Router();
-export default router;
+
+import getUserFromToken from "#middleware/getUserFromToken";
 
 import {
   createPlaylist,
@@ -9,27 +10,54 @@ import {
 } from "#db/queries/playlists";
 import { createPlaylistTrack } from "#db/queries/playlists_tracks";
 import { getTracksByPlaylistId } from "#db/queries/tracks";
+import requireBody from "#middleware/requireBody";
+
+router.use(getUserFromToken);
+
+router.use((req, res, next) => {
+  if (!req.user) {
+    return res.status(401).send("Authentication required.");
+  }
+  next();
+});
 
 router
   .route("/")
   .get(async (req, res) => {
-    const playlists = await getPlaylists();
-    res.send(playlists);
+    try {
+      const playlists = await getPlaylists(req.user.id);
+      res.send(playlists);
+    } catch (error) {
+      console.error(error.message);
+      res.status(500).send("Internal server error.");
+    }
   })
-  .post(async (req, res) => {
-    if (!req.body) return res.status(400).send("Request body is required.");
-
+  .post(requireBody(["name", "description"]), async (req, res) => {
     const { name, description } = req.body;
-    if (!name || !description)
-      return res.status(400).send("Request body requires: name, description");
+    const userId = req.user.id;
 
-    const playlist = await createPlaylist(name, description);
-    res.status(201).send(playlist);
+    try {
+      const playlist = await createPlaylist(name, description, userId);
+      res.status(201).send(playlist);
+    } catch (error) {
+      console.error(error.message);
+      res.status.send("Internal server error.");
+    }
   });
 
 router.param("id", async (req, res, next, id) => {
-  const playlist = await getPlaylistById(id);
+  let playlist;
+  try {
+    playlist = await getPlaylistById(id);
+  } catch (error) {
+    console.error(error.message);
+    return res.status(500).send("Internal server error.");
+  }
+
   if (!playlist) return res.status(404).send("Playlist not found.");
+  if (playlist.user_id !== req.user.id) {
+    return res.status(403).send("Forbidden: You do not own this playlist.");
+  }
 
   req.playlist = playlist;
   next();
@@ -42,15 +70,24 @@ router.route("/:id").get((req, res) => {
 router
   .route("/:id/tracks")
   .get(async (req, res) => {
-    const tracks = await getTracksByPlaylistId(req.playlist.id);
-    res.send(tracks);
+    try {
+      const tracks = await getTracksByPlaylistId(req.playlist.id);
+      res.send(tracks);
+    } catch (error) {
+      console.error(error.message);
+      res.status(500).send("Internal server error.");
+    }
   })
-  .post(async (req, res) => {
-    if (!req.body) return res.status(400).send("Request body is required.");
-
+  .post(requireBody(["trackId"]), async (req, res) => {
     const { trackId } = req.body;
-    if (!trackId) return res.status(400).send("Request body requires: trackId");
 
-    const playlistTrack = await createPlaylistTrack(req.playlist.id, trackId);
-    res.status(201).send(playlistTrack);
+    try {
+      const playlistTrack = await createPlaylistTrack(req.playlist.id, trackId);
+      res.status(201).send(playlistTrack);
+    } catch (error) {
+      console.error(error.message);
+      res.status(500).send("Internal server error.");
+    }
   });
+
+export default router;
